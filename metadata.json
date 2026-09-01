@@ -1,0 +1,8 @@
+{
+  "name": "Remix: SofaScore AI",
+  "description": "An AI-powered application to predict football halftime outcomes with high accuracy and real-time Google Search Grounding from SofaScore and Flashscore.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
