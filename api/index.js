@@ -59299,17 +59299,63 @@ var MatchStore = class {
     this.reconcileAllFinishedMatches();
   }
   /**
-   * Resets and re-seeds if the calendar day in Africa/Kampala changes (Strict date-specific cache)
+   * Resets and re-seeds if the calendar day in Africa/Kampala changes (Strict date-specific cache).
+   * Automatically archives all completed and predicted matches to persistent history before clearing.
    */
   checkDateRollover() {
     const todayStr = getKampalaTodayDateStr();
     if (this.activeDateKey !== todayStr) {
-      console.log(`[Date Rollover in Africa/Kampala] Old: ${this.activeDateKey} -> New: ${todayStr}. Clearing non-today fixtures.`);
+      console.log(`[Date Rollover in Africa/Kampala] Old: ${this.activeDateKey} -> New: ${todayStr}. Archiving completed predictions and seeding new fixtures.`);
+      try {
+        this.reconcileAllFinishedMatches();
+        for (const match of this.matches.values()) {
+          if (match.status === "finished" && match.prediction) {
+            const vs = match.verifiedScores;
+            const ftScores = vs && vs.fullTimeHome !== null && vs.fullTimeAway !== null ? `${vs.fullTimeHome}-${vs.fullTimeAway}` : match.currentScore;
+            const htScores = vs && vs.halfTimeHome !== null && vs.halfTimeAway !== null ? `${vs.halfTimeHome}-${vs.halfTimeAway}` : "0-0";
+            if (match.prediction.fullTime1X2) {
+              const isWon = match.prediction.fullTime1X2.predictionResult === "won";
+              globalHistoryStore.recordPredictionOutcome({
+                matchId: match.id,
+                match: match.match,
+                competition: match.competition || "Football Matchday",
+                matchDate: match.kampalaDate || this.activeDateKey,
+                homeTeam: match.homeTeam.name,
+                awayTeam: match.awayTeam.name,
+                market: "FT 1X2",
+                predictedPick: match.prediction.fullTime1X2.label,
+                predictedScore: match.prediction.fullTime1X2.predictedFtScore,
+                confidence: match.prediction.fullTime1X2.confidence,
+                oddsEstimate: (1 / Math.max(0.2, match.prediction.fullTime1X2.probabilities?.homeWin || 0.5)).toFixed(2),
+                verifiedHtScore: htScores,
+                verifiedFtScore: ftScores,
+                outcome: isWon ? "WON" : "LOST",
+                unitReturn: isWon ? 0.45 : -1,
+                source: match.resultSource || "Automated Midnight Settlement",
+                notes: `Automated midnight settlement for ${match.match} (${ftScores}).`
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[MatchStore] History archiving notice on date rollover:", err);
+      }
       this.matches.clear();
       this.activeDateKey = todayStr;
       this.seedAuthoritativeMatches();
       this.reconcileAllFinishedMatches();
     }
+  }
+  /**
+   * Retrieves matches for any specific calendar date (YYYY-MM-DD)
+   */
+  getMatchesForDate(targetDateStr) {
+    const todayStr = getKampalaTodayDateStr();
+    if (targetDateStr === todayStr) {
+      return this.getAllMatches();
+    }
+    const generatedMatches = generateDailyFixturesForDate(targetDateStr);
+    return generatedMatches.map((m2) => normalizeTodayFixture(m2));
   }
   /**
    * Seed authoritative matches dynamically for Africa/Kampala:
@@ -60041,7 +60087,7 @@ var HistoryStore = class {
     this.saveToDisk();
   }
 };
-var globalHistoryStore = new HistoryStore();
+var globalHistoryStore2 = new HistoryStore();
 
 // src/authStore.ts
 import fs3 from "fs";
@@ -62467,7 +62513,7 @@ var AutomationEngine = class {
       f1x2.actualFtResult = actualFtPick;
       f1x2.verifiedFtScore = ftScoreStr;
       const unitReturn = isWon ? Math.round((1 / Math.max(0.2, f1x2.probabilities?.homeWin || 0.5) - 1) * 100) / 100 : -1;
-      globalHistoryStore.recordPredictionOutcome({
+      globalHistoryStore2.recordPredictionOutcome({
         matchId: match.id,
         match: match.match,
         competition: match.competition || "Football Matchday",
@@ -62536,7 +62582,7 @@ var AutomationEngine = class {
       } else {
         dnb.predictionResult = "lost";
       }
-      globalHistoryStore.recordPredictionOutcome({
+      globalHistoryStore2.recordPredictionOutcome({
         matchId: match.id,
         match: match.match,
         competition: match.competition || "Football Matchday",
@@ -62560,7 +62606,7 @@ var AutomationEngine = class {
     p.htPredictionResult = isHtUnderWon ? "won" : "lost";
     p.verifiedHtScore = htScoreStr;
     p.htTotalGoals = htTotal;
-    globalHistoryStore.recordPredictionOutcome({
+    globalHistoryStore2.recordPredictionOutcome({
       matchId: match.id,
       match: match.match,
       competition: match.competition || "Football Matchday",
@@ -81175,7 +81221,7 @@ app.post("/api/automation/simulate-goal", (req, res) => {
 });
 app.get("/api/history", (req, res) => {
   try {
-    const stats = globalHistoryStore.getStats();
+    const stats = globalHistoryStore2.getStats();
     res.json(stats);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch history" });
@@ -81183,7 +81229,7 @@ app.get("/api/history", (req, res) => {
 });
 app.get("/api/history/stats", (req, res) => {
   try {
-    const stats = globalHistoryStore.getStats();
+    const stats = globalHistoryStore2.getStats();
     res.json(stats);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch stats" });
@@ -81191,7 +81237,7 @@ app.get("/api/history/stats", (req, res) => {
 });
 app.post("/api/history/clear", (req, res) => {
   try {
-    globalHistoryStore.clearAll();
+    globalHistoryStore2.clearAll();
     res.json({ success: true, message: "History cleared" });
   } catch (error) {
     res.status(500).json({ error: "Failed to clear history" });
@@ -81599,10 +81645,19 @@ app.get("/api/all-matches", (req, res) => {
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   const todayDateStr = getKampalaTodayDateStr();
-  const allMatches = globalMatchStore.getAllMatches().filter((m2) => {
-    return (m2.kampalaDate || todayDateStr) === todayDateStr;
+  const queryDate = req.query.date;
+  const targetDateStr = queryDate || todayDateStr;
+  globalAutomationEngine.runAutomationCycle().catch(() => {
   });
-  res.json(allMatches);
+  const matches = globalMatchStore.getMatchesForDate(targetDateStr);
+  res.json(matches);
+});
+app.get("/api/matches/date/:dateStr", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  const dateStr = req.params.dateStr;
+  const matches = globalMatchStore.getMatchesForDate(dateStr);
+  res.json(matches);
 });
 var apiRouter_default = (req, res) => {
   return app(req, res);

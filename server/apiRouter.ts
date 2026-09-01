@@ -626,15 +626,28 @@ app.get('/api/ai-bot/snapshots', (req, res) => {
   }
 });
 
-// All Matches strictly filtered for Africa/Kampala today
+// All Matches filtered for requested date (or today in Africa/Kampala by default)
 app.get('/api/all-matches', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   const todayDateStr = getKampalaTodayDateStr();
-  const allMatches = globalMatchStore.getAllMatches().filter((m) => {
-    return (m.kampalaDate || todayDateStr) === todayDateStr;
-  });
-  res.json(allMatches);
+  const queryDate = req.query.date as string | undefined;
+  const targetDateStr = queryDate || todayDateStr;
+
+  // Run a quick non-blocking automation pass to ensure score/lineup progressions are synced
+  globalAutomationEngine.runAutomationCycle().catch(() => {});
+
+  const matches = globalMatchStore.getMatchesForDate(targetDateStr);
+  res.json(matches);
+});
+
+// Explicit Matches by Date endpoint
+app.get('/api/matches/date/:dateStr', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const dateStr = req.params.dateStr;
+  const matches = globalMatchStore.getMatchesForDate(dateStr);
+  res.json(matches);
 });
 
 export default (req: any, res: any) => {

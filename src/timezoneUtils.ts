@@ -164,3 +164,42 @@ export function formatKampalaTime(timestampOrIso: string | number | Date | null 
     return 'Today EAT';
   }
 }
+
+/**
+ * Computes shifted YYYY-MM-DD date in Africa/Kampala by day offset (-1, +1, etc.)
+ */
+export function getShiftedDateStr(baseDateStr: string, dayOffset: number): string {
+  try {
+    const parts = baseDateStr.split('-').map((p) => parseInt(p, 10));
+    const dateObj = new Date(Date.UTC(parts[0], (parts[1] || 1) - 1, (parts[2] || 1) + dayOffset, 12, 0, 0));
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TARGET_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    return formatter.format(dateObj);
+  } catch {
+    return baseDateStr;
+  }
+}
+
+/**
+ * Returns formatted human-readable date label in Africa/Kampala (e.g. "Tuesday, 1 Sep 2026")
+ */
+export function formatKampalaDateHeader(dateStr: string): string {
+  try {
+    const parts = dateStr.split('-').map((p) => parseInt(p, 10));
+    const dateObj = new Date(Date.UTC(parts[0], (parts[1] || 1) - 1, parts[2] || 1, 12, 0, 0));
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: TARGET_TIMEZONE,
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+    return formatter.format(dateObj);
+  } catch {
+    return dateStr;
+  }
+}

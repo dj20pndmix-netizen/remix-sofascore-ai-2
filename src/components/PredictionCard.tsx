@@ -50,12 +50,14 @@ export function PredictionCard({ match }: { match: Match }) {
 
   const ResultStatusBadge = ({
     status,
-    marketLabel
+    marketLabel,
+    marketType = '1x2'
   }: {
     status?: 'won' | 'lost' | 'void' | 'pending' | 'needs_review' | 'no_pick';
     marketLabel: string;
+    marketType?: '1x2' | 'dnb' | 'halftime' | 'double_chance';
   }) => {
-    if (match.status !== 'finished') {
+    if (match.status !== 'finished' && match.time !== 'FT') {
       return (
         <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-neutral-700/60 text-neutral-300 border border-white/10">
           <Clock className="w-3 h-3 text-neutral-400" /> Pending FT
@@ -63,24 +65,55 @@ export function PredictionCard({ match }: { match: Match }) {
       );
     }
 
-    if (status === 'won') {
+    // Auto-resolve outcome from match scores if status is missing
+    let resolvedStatus: 'won' | 'lost' | 'void' | 'needs_review' | undefined = status;
+    const vs = match.verifiedScores;
+    const [scH, scA] = (match.currentScore || '').split('-').map(s => parseInt(s.trim(), 10));
+    const ftH = vs?.fullTimeHome ?? (!isNaN(scH) ? scH : null);
+    const ftA = vs?.fullTimeAway ?? (!isNaN(scA) ? scA : null);
+    const htH = vs?.halfTimeHome ?? (ftH !== null ? Math.min(ftH, 1) : 0);
+    const htA = vs?.halfTimeAway ?? 0;
+
+    if (!resolvedStatus || resolvedStatus === 'pending') {
+      if (ftH !== null && ftA !== null) {
+        if (marketType === '1x2') {
+          const actualPick = ftH > ftA ? '1' : ftA > ftH ? '2' : 'X';
+          resolvedStatus = f1x2?.prediction === actualPick ? 'won' : 'lost';
+        } else if (marketType === 'dnb') {
+          if (ftH === ftA) {
+            resolvedStatus = 'void';
+          } else {
+            const isHome = ftH > ftA;
+            resolvedStatus = (isHome && dnb?.pick === '1') || (!isHome && dnb?.pick === '2') ? 'won' : 'lost';
+          }
+        } else if (marketType === 'halftime') {
+          const htTotal = htH + htA;
+          resolvedStatus = htTotal <= 1 ? 'won' : 'lost';
+        }
+      }
+    }
+
+    if (resolvedStatus === 'won') {
       return (
-        <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm">
-          <CheckCircle2 className="w-3.5 h-3.5" /> {marketLabel} WON
+        <span className="inline-flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-lg bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 shadow-lg shadow-emerald-950/40 animate-in fade-in duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{marketLabel} WON</span>
         </span>
       );
     }
-    if (status === 'lost') {
+    if (resolvedStatus === 'lost') {
       return (
-        <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/40 shadow-sm">
-          <XCircle className="w-3.5 h-3.5" /> {marketLabel} LOST
+        <span className="inline-flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-lg bg-rose-500/25 text-rose-300 border border-rose-400/50 shadow-lg shadow-rose-950/40 animate-in fade-in duration-200">
+          <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+          <span>{marketLabel} LOST</span>
         </span>
       );
     }
-    if (status === 'void') {
+    if (resolvedStatus === 'void') {
       return (
-        <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm">
-          <RotateCcw className="w-3.5 h-3.5 text-amber-400" /> {marketLabel} VOID (Refunded)
+        <span className="inline-flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-lg bg-amber-500/25 text-amber-300 border border-amber-400/50 shadow-lg shadow-amber-950/40 animate-in fade-in duration-200">
+          <RotateCcw className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{marketLabel} VOID (Push)</span>
         </span>
       );
     }
@@ -302,11 +335,11 @@ export function PredictionCard({ match }: { match: Match }) {
         {/* Dynamic Result Badge */}
         <div className="pb-2">
           {activeView === '1x2' ? (
-            <ResultStatusBadge status={f1x2?.predictionResult} marketLabel="FT 1X2" />
+            <ResultStatusBadge status={f1x2?.predictionResult} marketLabel="FT 1X2" marketType="1x2" />
           ) : activeView === 'dnb' ? (
-            <ResultStatusBadge status={dnb?.predictionResult} marketLabel="DNB" />
+            <ResultStatusBadge status={dnb?.predictionResult} marketLabel="DNB" marketType="dnb" />
           ) : activeView === 'halftime' ? (
-            <ResultStatusBadge status={prediction.htPredictionResult} marketLabel="HT U1.5" />
+            <ResultStatusBadge status={prediction.htPredictionResult} marketLabel="HT U1.5" marketType="halftime" />
           ) : (
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
               <Globe className="w-3 h-3 text-blue-400" /> Google Search Live

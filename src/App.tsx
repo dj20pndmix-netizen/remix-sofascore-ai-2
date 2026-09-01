@@ -24,6 +24,8 @@ import { globalNotificationService } from './notificationService';
 import {
   getKampalaDateInfo,
   getKampalaTodayDateStr,
+  getShiftedDateStr,
+  formatKampalaDateHeader,
   isFixtureTodayInKampala,
   TARGET_TIMEZONE
 } from './timezoneUtils';
@@ -143,15 +145,16 @@ export default function App() {
     }
   };
 
-  async function fetchAllMatches(forceRefresh = false, retryCount = 0) {
+  async function fetchAllMatches(forceRefresh = false, retryCount = 0, dateParam?: string) {
     if (forceRefresh) {
       setRefreshing(true);
     }
 
     const token = localStorage.getItem('predictpro_auth_token');
+    const targetDate = dateParam || activeDateEAT || getKampalaTodayDateStr();
 
     try {
-      const response = await fetch(`/api/all-matches${forceRefresh ? '?refresh=true' : ''}`, {
+      const response = await fetch(`/api/all-matches?date=${encodeURIComponent(targetDate)}${forceRefresh ? '&refresh=true' : ''}`, {
         headers: {
           Accept: 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -164,14 +167,14 @@ export default function App() {
 
       const data = await response.json();
       if (Array.isArray(data)) {
-        // DOUBLE DATE VALIDATION: Accept only fixtures matching today's date in Africa/Kampala
-        const validatedToday = data.filter((m: Match) => {
-          const matchDate = m.kampalaDate || getKampalaTodayDateStr();
-          return matchDate === currentTodayDateStr;
+        // DOUBLE DATE VALIDATION: Accept fixtures matching the active date
+        const validated = data.filter((m: Match) => {
+          const matchDate = m.kampalaDate || targetDate;
+          return matchDate === targetDate;
         });
 
-        globalMatchStore.upsertMatches(validatedToday);
-        setAllMatches(validatedToday);
+        globalMatchStore.upsertMatches(validated);
+        setAllMatches(validated);
         setError(null);
         setLastUpdated(
           new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -179,16 +182,14 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Fetch notice:', err);
-      // Fallback to local store strictly filtered for today
-      const localMatches = globalMatchStore.getAllMatches().filter((m) => {
-        return (m.kampalaDate || getKampalaTodayDateStr()) === currentTodayDateStr;
-      });
+      // Fallback to local store filtered for the active target date
+      const localMatches = globalMatchStore.getMatchesForDate(targetDate);
       if (localMatches && localMatches.length > 0) {
         setAllMatches(localMatches);
         setError(null);
       } else if (retryCount < 2) {
         setTimeout(() => {
-          fetchAllMatches(forceRefresh, retryCount + 1);
+          fetchAllMatches(forceRefresh, retryCount + 1, targetDate);
         }, 1500);
         return;
       } else {
@@ -205,14 +206,17 @@ export default function App() {
     globalNotificationService.init();
   }, []);
 
-  // 12:00 AM Midnight Date Rollover Watcher (Checks Africa/Kampala date every 5 seconds)
+  // 12:00 AM Midnight Date Rollover Watcher (Continuously checks Africa/Kampala clock)
   useEffect(() => {
     const rolloverWatcher = setInterval(() => {
       const liveTodayDate = getKampalaTodayDateStr();
-      if (liveTodayDate !== activeDateEAT) {
-        console.log(`[App Rollover Watcher] Clock struck 12:00 AM Midnight in EAT: ${activeDateEAT} -> ${liveTodayDate}`);
+      const currentToday = getKampalaTodayDateStr();
+
+      // If user was viewing today and midnight struck
+      if (activeDateEAT === currentToday && liveTodayDate !== activeDateEAT) {
+        console.log(`[App Rollover Watcher] Midnight struck in Africa/Kampala: ${activeDateEAT} -> ${liveTodayDate}`);
         setActiveDateEAT(liveTodayDate);
-        fetchAllMatches(true);
+        fetchAllMatches(true, 0, liveTodayDate);
 
         const newDateInfo = getKampalaDateInfo();
         globalNotificationService.processIncomingAlert(
@@ -222,8 +226,8 @@ export default function App() {
             matchName: `${newDateInfo.formattedHeader} Matchday`,
             competition: 'Verified Football AI Feed',
             eventType: 'MATCHDAY_STARTED',
-            title: `📅 Matchday Updated for ${newDateInfo.formattedHeader}`,
-            body: `It is now 12:00 AM in Africa/Kampala! Today's new matchday schedule and verified AI predictions are loaded.`,
+            title: `📅 Matchday Auto-Updated for ${newDateInfo.formattedHeader}`,
+            body: `Midnight reached! Today's new matchday schedule and verified AI predictions for ${newDateInfo.formattedHeader} have been loaded automatically.`,
             timestamp: new Date().toISOString(),
             kampalaTime: `${liveTodayDate} 00:00 EAT`,
             isRead: false
@@ -231,16 +235,16 @@ export default function App() {
           true
         );
       }
-    }, 5000);
+    }, 3000);
 
     return () => clearInterval(rolloverWatcher);
   }, [activeDateEAT]);
 
   useEffect(() => {
-    fetchAllMatches();
-    const interval = setInterval(() => fetchAllMatches(false), 20000);
+    fetchAllMatches(false, 0, activeDateEAT);
+    const interval = setInterval(() => fetchAllMatches(false, 0, activeDateEAT), 20000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeDateEAT]);
 
   const handleEnableNotifications = async () => {
     const res = await globalNotificationService.requestPermission();
@@ -248,19 +252,20 @@ export default function App() {
     setShowNotificationBanner(false);
   };
 
-  // DOUBLE DATE VALIDATION & DEDUPLICATION: Strict enforcement of Africa/Kampala Today
+  // DOUBLE DATE VALIDATION & DEDUPLICATION: Strict enforcement of the active date
   const deduplicatedMatches = React.useMemo(() => {
     const seenTeams = new Set<string>();
     const result: Match[] = [];
+    const targetDate = activeDateEAT || getKampalaTodayDateStr();
 
-    // Filter strictly for today in Africa/Kampala
-    const todayOnlyMatches = allMatches.filter((m) => {
-      const matchDate = m.kampalaDate || getKampalaTodayDateStr();
-      return matchDate === currentTodayDateStr;
+    // Filter strictly for the active date
+    const targetMatches = allMatches.filter((m) => {
+      const matchDate = m.kampalaDate || targetDate;
+      return matchDate === targetDate;
     });
 
     // Prioritize Upcoming kickoffs first, then Live in-play, then Finished
-    const sorted = [...todayOnlyMatches].sort((a, b) => {
+    const sorted = [...targetMatches].sort((a, b) => {
       const statusWeight = (s: string) => (s === 'upcoming' ? 1 : s === 'live' ? 2 : 3);
       return statusWeight(a.status) - statusWeight(b.status);
     });
@@ -276,7 +281,7 @@ export default function App() {
       }
     }
     return result;
-  }, [allMatches, currentTodayDateStr]);
+  }, [allMatches, activeDateEAT]);
 
   // Filter matches by team name / match title search query
   const filteredMatches = React.useMemo(() => {
@@ -705,34 +710,103 @@ export default function App() {
             {/* Real-time Central Automation System Banner */}
             <AutomationStatusBanner onTriggerSync={() => fetchAllMatches(true)} />
 
-            {/* Today's Matchday Banner */}
-            <div className="bg-neutral-800/90 border border-emerald-500/30 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-sm font-bold text-white uppercase tracking-wider">
-                      Today's Fixtures &bull; {kampalaDateInfo.formattedHeader}
-                    </h1>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                      TODAY ONLY &bull; EAT (UTC+3)
-                    </span>
+            {/* Today's Matchday Banner & Midnight Auto-Roll Date Selector */}
+            <div className="bg-neutral-800/90 border border-emerald-500/30 rounded-xl p-3.5 space-y-3 shadow-md">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <Calendar className="w-5 h-5" />
                   </div>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    Strictly matches scheduled for {currentTodayDateStr} (00:00 - 23:59 Africa/Kampala)
-                  </p>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h1 className="text-sm font-bold text-white uppercase tracking-wider">
+                        {formatKampalaDateHeader(activeDateEAT)} Fixtures
+                      </h1>
+                      {activeDateEAT === getKampalaTodayDateStr() ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          <span>AUTO-LIVE (EAT UTC+3)</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          CALENDAR ARCHIVE
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-neutral-900 text-neutral-300 border border-white/10">
+                        {activeDateEAT}
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {activeDateEAT === getKampalaTodayDateStr()
+                        ? `Automatic midnight rollover active • Fresh fixtures load dynamically at 00:00 Africa/Kampala`
+                        : `Browsing fixtures for ${formatKampalaDateHeader(activeDateEAT)}`}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Date Switcher Tabs */}
+                <div className="flex flex-wrap items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10">
+                  <button
+                    onClick={() => {
+                      const prevDate = getShiftedDateStr(getKampalaTodayDateStr(), -1);
+                      setActiveDateEAT(prevDate);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                      activeDateEAT === getShiftedDateStr(getKampalaTodayDateStr(), -1)
+                        ? 'bg-neutral-700 text-white shadow-sm'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    Yesterday
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const today = getKampalaTodayDateStr();
+                      setActiveDateEAT(today);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      activeDateEAT === getKampalaTodayDateStr()
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/50 ring-1 ring-emerald-400'
+                        : 'text-emerald-400 hover:text-emerald-300'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Today (Auto-Live)</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      const nextDate = getShiftedDateStr(getKampalaTodayDateStr(), 1);
+                      setActiveDateEAT(nextDate);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                      activeDateEAT === getShiftedDateStr(getKampalaTodayDateStr(), 1)
+                        ? 'bg-neutral-700 text-white shadow-sm'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    Tomorrow
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2.5 text-xs font-mono">
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/40 border border-white/10 text-neutral-200">
-                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <span>{upcomingMatches.length} Upcoming Matches</span>
+
+              {/* Status summary metrics */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs font-mono border-t border-white/5 text-neutral-300">
+                <div className="flex items-center gap-2">
+                  <span className="text-neutral-500">Scheduled:</span>
+                  <span className="text-emerald-400 font-bold">{deduplicatedMatches.length} Matches</span>
+                  <span className="text-neutral-600">&bull;</span>
+                  <span className="text-blue-400 font-bold">{upcomingMatches.length} Upcoming</span>
+                  <span className="text-neutral-600">&bull;</span>
+                  <span className="text-red-400 font-bold">{liveMatches.length} Live</span>
+                  <span className="text-neutral-600">&bull;</span>
+                  <span className="text-neutral-300 font-bold">{finishedMatches.length} Settled</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/40 border border-white/10 text-neutral-200">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                  <span>{liveMatches.length} Live In-Play</span>
+
+                <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                  <Clock className="w-3 h-3 text-emerald-400" />
+                  <span>Midnight Transition: <strong className="text-emerald-300">AUTO-FETCH ENABLED</strong></span>
                 </div>
               </div>
             </div>
