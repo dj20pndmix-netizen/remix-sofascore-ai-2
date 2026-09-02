@@ -23,6 +23,7 @@ import {
   TARGET_TIMEZONE
 } from './timezoneUtils';
 import { KNOWN_TEAM_ROSTERS, createGenericRosterWithRealNames } from './data/teamRosters';
+import { globalLiveScoreboard } from './services/liveScoreboardService';
 
 export class AutomationEngine {
   private isRunning: boolean = false;
@@ -339,7 +340,18 @@ export class AutomationEngine {
     this.lastRunTimestamp = new Date().toISOString();
     this.nextScheduledRun = new Date(Date.now() + this.refreshFrequencySec * 1000).toISOString();
 
-    // 1. Check Date Rollover (Daily Reset at 00:00 Africa/Kampala)
+    // 1. Synchronize real-time live scoreboards across all global leagues
+    try {
+      this.activePhase = 'DISCOVERY';
+      const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(todayStr);
+      if (liveMatches && liveMatches.length > 0) {
+        globalMatchStore.upsertMatches(liveMatches);
+      }
+    } catch (err) {
+      console.warn('[Automation Engine] Live scoreboard sync notice:', err);
+    }
+
+    // 2. Check Date Rollover (Daily Reset at 00:00 Africa/Kampala)
     if (this.activeDateEAT !== todayStr) {
       this.activePhase = 'DISCOVERY';
       const prevDate = this.activeDateEAT;
@@ -366,7 +378,7 @@ export class AutomationEngine {
 
     const matches = globalMatchStore.getAllMatches().filter(m => (m.kampalaDate || todayStr) === todayStr);
 
-    // 2. Process each match automatically through the pipeline
+    // 3. Process each match automatically through the pipeline
     for (const match of matches) {
       await this.processMatchAutomations(match, todayStr);
     }

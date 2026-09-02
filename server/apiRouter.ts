@@ -21,6 +21,7 @@ import {
 } from '../src/searchGroundingService';
 import { runBatchAiAnalysis } from '../src/services/aiPredictionBotEngine';
 import { globalAiSnapshotStore } from '../src/services/aiSnapshotStore';
+import { globalLiveScoreboard } from '../src/services/liveScoreboardService';
 import type { AiBotJobProgress } from '../src/types';
 import {
   getKampalaDateInfo,
@@ -627,14 +628,25 @@ app.get('/api/ai-bot/snapshots', (req, res) => {
 });
 
 // All Matches filtered for requested date (or today in Africa/Kampala by default)
-app.get('/api/all-matches', (req, res) => {
+app.get('/api/all-matches', async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   const todayDateStr = getKampalaTodayDateStr();
   const queryDate = req.query.date as string | undefined;
   const targetDateStr = queryDate || todayDateStr;
+  const forceRefresh = req.query.refresh === 'true';
 
-  // Run a quick non-blocking automation pass to ensure score/lineup progressions are synced
+  try {
+    const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(targetDateStr, forceRefresh);
+    if (liveMatches && liveMatches.length > 0) {
+      globalMatchStore.upsertMatches(liveMatches);
+      return res.json(liveMatches);
+    }
+  } catch (err) {
+    console.warn('[Vercel API Router] Live fetch notice:', err);
+  }
+
+  // Non-blocking automation pass
   globalAutomationEngine.runAutomationCycle().catch(() => {});
 
   const matches = globalMatchStore.getMatchesForDate(targetDateStr);
@@ -642,10 +654,22 @@ app.get('/api/all-matches', (req, res) => {
 });
 
 // Explicit Matches by Date endpoint
-app.get('/api/matches/date/:dateStr', (req, res) => {
+app.get('/api/matches/date/:dateStr', async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   const dateStr = req.params.dateStr;
+  const forceRefresh = req.query.refresh === 'true';
+
+  try {
+    const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(dateStr, forceRefresh);
+    if (liveMatches && liveMatches.length > 0) {
+      globalMatchStore.upsertMatches(liveMatches);
+      return res.json(liveMatches);
+    }
+  } catch (err) {
+    console.warn('[Vercel API Router] Date fetch notice:', err);
+  }
+
   const matches = globalMatchStore.getMatchesForDate(dateStr);
   res.json(matches);
 });

@@ -19,6 +19,7 @@ import {
 } from './src/searchGroundingService';
 import { runBatchAiAnalysis } from './src/services/aiPredictionBotEngine';
 import { globalAiSnapshotStore } from './src/services/aiSnapshotStore';
+import { globalLiveScoreboard } from './src/services/liveScoreboardService';
 import type { AiBotJobProgress } from './src/types';
 import {
   getKampalaDateInfo,
@@ -1376,13 +1377,13 @@ async function startServer() {
 
   // Initial fetch on server startup and launch centralized background automation worker
   setTimeout(() => {
-    fetchRealMatchesStrictlyToday().then((matches) => {
+    globalLiveScoreboard.fetchRealLiveMatches().then((matches) => {
       if (matches && matches.length > 0) {
         globalMatchStore.upsertMatches(matches);
       }
       // Start Central Background Automation Engine with 20-second active polling
       globalAutomationEngine.start(20);
-      console.log('[Automated Engine] Centralized background monitoring worker activated.');
+      console.log('[Automated Engine] Centralized background monitoring worker activated with live scoreboard feed.');
     }).catch(err => {
       globalAutomationEngine.start(20);
       console.log('Background sync initialization complete:', err?.message || err);
@@ -1395,43 +1396,42 @@ async function startServer() {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     try {
       const forceRefresh = req.query.refresh === 'true';
-      const now = Date.now();
       const todayDateStr = getKampalaTodayDateStr();
+      const queryDate = req.query.date as string | undefined;
+      const targetDateStr = queryDate || todayDateStr;
 
-      // Check if day changed
-      if (dateSpecificCache.dateKey !== todayDateStr) {
-        dateSpecificCache = {
-          dateKey: todayDateStr,
-          lastFetchedTime: 0,
-          fixtures: []
-        };
+      const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(targetDateStr, forceRefresh);
+      if (liveMatches && liveMatches.length > 0) {
+        globalMatchStore.upsertMatches(liveMatches);
+        return res.json(liveMatches);
       }
 
-      if (forceRefresh || (now - dateSpecificCache.lastFetchedTime > 10 * 60 * 1000 && !isFetching)) {
-        isFetching = true;
-        fetchRealMatchesStrictlyToday().then((incoming) => {
-          if (incoming && incoming.length > 0) {
-            globalMatchStore.upsertMatches(incoming);
-          }
-          isFetching = false;
-        }).catch(() => {
-          isFetching = false;
-        });
-      }
-
-      // Return strictly today's matches from authoritative store
-      const allMatches = globalMatchStore.getAllMatches().filter((m) => {
-        return (m.kampalaDate || todayDateStr) === todayDateStr;
-      });
-
+      // Return strictly target date matches from authoritative store
+      const allMatches = globalMatchStore.getMatchesForDate(targetDateStr);
       res.json(allMatches);
     } catch (error) {
       console.error('Error fetching today matches:', error);
       const todayDateStr = getKampalaTodayDateStr();
-      const allMatches = globalMatchStore.getAllMatches().filter((m) => {
-        return (m.kampalaDate || todayDateStr) === todayDateStr;
-      });
+      const allMatches = globalMatchStore.getMatchesForDate(todayDateStr);
       res.json(allMatches);
+    }
+  });
+
+  app.get('/api/matches/date/:dateStr', async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    try {
+      const dateStr = req.params.dateStr;
+      const forceRefresh = req.query.refresh === 'true';
+      const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(dateStr, forceRefresh);
+      if (liveMatches && liveMatches.length > 0) {
+        globalMatchStore.upsertMatches(liveMatches);
+        return res.json(liveMatches);
+      }
+      const allMatches = globalMatchStore.getMatchesForDate(dateStr);
+      res.json(allMatches);
+    } catch {
+      res.json([]);
     }
   });
 
