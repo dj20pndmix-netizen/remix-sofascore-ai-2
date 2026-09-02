@@ -250,7 +250,14 @@ export class LiveScoreboardService {
         const awayName = awayComp?.team?.displayName || awayComp?.team?.name || 'Away Team';
 
         const eventDateStr = event.date; // e.g. 2026-09-02T18:45Z
-        const matchKampalaDate = getKampalaDateFromTimestamp(eventDateStr) || todayStr;
+        const matchKampalaDate = getKampalaDateFromTimestamp(eventDateStr);
+
+        // STRICT DATE ISOLATION:
+        // A match must only appear under its true calendar date in Africa/Kampala (or if live right now)
+        const isMatchPlayingTargetDate = matchKampalaDate === todayStr || event.status?.type?.state === 'in';
+        if (!isMatchPlayingTargetDate) {
+          continue;
+        }
 
         // Determine Match Status & Clock
         const state = event.status?.type?.state; // 'pre', 'in', 'post'
@@ -321,7 +328,7 @@ export class LiveScoreboardService {
           competition: `${competitionTitle} (Today)`,
           scheduledStartTime: `Today, ${formattedTime}`,
           kickoffTimestamp: eventDateStr,
-          kampalaDate: matchKampalaDate,
+          kampalaDate: matchKampalaDate || todayStr,
           status,
           match: `${homeName} vs ${awayName}`,
           time,
