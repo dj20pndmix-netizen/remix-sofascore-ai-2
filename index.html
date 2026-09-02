@@ -2,13 +2,35 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#10b981" />
-    <meta name="description" content="Football AI Predictor & Live Tactical Analysis — Strictly Today's Games, Verified Squad Lineups, 2D Pitch Shapes, and Persistent Prediction Outcome Ledger" />
-    <title>Predict Pro — Football AI & Live Tactical Analytics</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="description" content="PredictPro — Football AI Predictor & Live Tactical Analysis. Strictly Today's Matches, Verified Squad Lineups, 2D Pitch Shapes, and Persistent Prediction Outcome Ledger." />
+    
+    <!-- PWA Manifest & Standalone App Setup -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    
+    <!-- iOS Web App Standalone Meta -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PredictPro" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="PredictPro" />
+
+    <title>PredictPro — Football AI &amp; Live Tactical Analytics</title>
   </head>
-  <body class="bg-neutral-900 text-white antialiased">
+  <body class="bg-neutral-950 text-white antialiased selection:bg-emerald-500 selection:text-neutral-950">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch((err) => {
+            console.warn('[PWA] ServiceWorker registration notice:', err);
+          });
+        });
+      }
+    </script>
   </body>
 </html>

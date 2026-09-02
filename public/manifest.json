@@ -1,0 +1,51 @@
+{
+  "name": "PredictPro — Football AI & Live Tactical Analytics",
+  "short_name": "PredictPro",
+  "description": "Football AI Predictor & Live Tactical Analysis — Strictly Today's Matches, Verified Squad Lineups, and Persistent Outcome Ledger",
+  "start_url": "/",
+  "id": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0a0c",
+  "theme_color": "#10b981",
+  "categories": ["sports", "news", "analytics"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Live Matches",
+      "url": "/?tab=live",
+      "description": "View live in-play matches"
+    },
+    {
+      "name": "AI Best Picks",
+      "url": "/?tab=ai-bot",
+      "description": "Run AI Best-Picks Analysis"
+    },
+    {
+      "name": "Accuracy Dashboard",
+      "url": "/?tab=accuracy",
+      "description": "View verified accuracy metrics"
+    }
+  ]
+}
