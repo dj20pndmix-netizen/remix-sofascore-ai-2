@@ -398,7 +398,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500 font-sans">
         <div className="p-8 rounded-3xl bg-zinc-900/90 border border-zinc-800 shadow-2xl flex flex-col items-center gap-3 backdrop-blur-xl animate-fadeIn">
-          <Logo />
+          <Logo iconSize="w-16 h-16" />
           <RefreshCw className="w-6 h-6 animate-spin text-emerald-400 mt-2" />
           <span className="text-xs font-mono text-zinc-400">Loading PredictPro AI Scoreboard...</span>
         </div>

@@ -395,7 +395,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           {/* Logo & Brand Header */}
           <div className="text-center mb-5">
             <div className="inline-flex items-center justify-center mb-2.5">
-              <Logo />
+              <Logo iconSize="w-14 h-14" />
             </div>
             <h1 className="text-xl font-black tracking-tight text-white flex items-center justify-center gap-2">
               PREDICT PRO
