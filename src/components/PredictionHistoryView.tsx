@@ -29,8 +29,6 @@ import {
   ArrowDownRight,
   FileSpreadsheet
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 export function PredictionHistoryView() {
   const [historyData, setHistoryData] = useState<HistoricalStatsPayload>({
@@ -83,7 +81,9 @@ export function PredictionHistoryView() {
     return true;
   });
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text('Football AI Engine — Historical Prediction Audit Ledger', 14, 18);

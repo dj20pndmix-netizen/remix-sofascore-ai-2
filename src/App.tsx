@@ -29,8 +29,6 @@ import {
   isFixtureTodayInKampala,
   TARGET_TIMEZONE
 } from './timezoneUtils';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import {
   RefreshCw,
   Download,
@@ -96,35 +94,61 @@ export default function App() {
   const [mainView, setMainView] = useState<'predictions' | 'ai-bot' | 'history' | 'accuracy' | 'admin'>('predictions');
 
   // Match Category Filter Tabs
-  const [activeTab, setActiveTab] = useState<'all' | 'live' | 'upcoming' | 'finished'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'live' | 'upcoming' | 'finished' | 'value'>('all');
 
-  // Verify authentication session on startup before rendering any protected dashboard content
+  // Verify authentication session on startup with automatic guest fallback and safety timeout
   useEffect(() => {
-    const token = localStorage.getItem('predictpro_auth_token');
-    if (!token) {
-      setAuthChecking(false);
-      return;
-    }
+    let isMounted = true;
+    const safetyTimer = setTimeout(() => {
+      if (isMounted) setAuthChecking(false);
+    }, 1000);
 
-    fetch('/api/auth/me', {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success && data.user) {
-          setCurrentUser(data.user);
-        } else {
+    const initSession = async () => {
+      const token = localStorage.getItem('predictpro_auth_token');
+      if (token) {
+        try {
+          const res = await fetch('/api/auth/me', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const data = await res.json();
+          if (data.success && data.user && isMounted) {
+            setCurrentUser(data.user);
+            setAuthChecking(false);
+            clearTimeout(safetyTimer);
+            return;
+          }
+        } catch {
           localStorage.removeItem('predictpro_auth_token');
-          setCurrentUser(null);
         }
-      })
-      .catch(() => {
-        localStorage.removeItem('predictpro_auth_token');
-        setCurrentUser(null);
-      })
-      .finally(() => {
-        setAuthChecking(false);
-      });
+      }
+
+      // Automatically initialize instant guest session so visitor never waits or hits a paywall/login barrier
+      try {
+        const guestRes = await fetch('/api/auth/guest-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const guestData = await guestRes.json();
+        if (guestData.success && guestData.session && isMounted) {
+          localStorage.setItem('predictpro_auth_token', guestData.session.token);
+          setCurrentUser(guestData.session.user);
+        }
+      } catch {
+        // Safe fallback to client-side guest
+      } finally {
+        if (isMounted) {
+          setAuthChecking(false);
+          clearTimeout(safetyTimer);
+        }
+      }
+    };
+
+    initSession();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimer);
+    };
   }, []);
 
   const handleAuthSuccess = (session: AuthSessionPayload) => {
@@ -314,7 +338,13 @@ export default function App() {
     .filter((m) => m.status === 'finished' && m.prediction)
     .sort((a, b) => b.id - a.id);
 
-  const handleDownloadPdf = () => {
+  const valueBetMatches = filteredMatches
+    .filter((m) => m.prediction?.valueBet?.hasValue)
+    .sort((a, b) => (b.prediction?.valueBet?.edgePercentage ?? 0) - (a.prediction?.valueBet?.edgePercentage ?? 0));
+
+  const handleDownloadPdf = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text(`Football AI Engine — Today's Verified Predictions (${kampalaDateInfo.formattedHeader})`, 14, 18);
@@ -363,23 +393,33 @@ export default function App() {
     doc.save(`Today_Predictions_${currentTodayDateStr}_EAT.pdf`);
   };
 
-  // 1. If verifying session on startup/refresh, show splash loader with zero dashboard content
+  // 1. Brief splash loader with guaranteed 1s safety timeout
   if (authChecking) {
     return (
       <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center p-4 selection:bg-emerald-500 font-sans">
         <div className="p-8 rounded-3xl bg-zinc-900/90 border border-zinc-800 shadow-2xl flex flex-col items-center gap-3 backdrop-blur-xl animate-fadeIn">
           <Logo />
           <RefreshCw className="w-6 h-6 animate-spin text-emerald-400 mt-2" />
-          <span className="text-xs font-mono text-zinc-400">Verifying PredictPro Authentication...</span>
+          <span className="text-xs font-mono text-zinc-400">Loading PredictPro AI Scoreboard...</span>
         </div>
       </div>
     );
   }
 
-  // 2. If user is NOT signed in, immediately render the dedicated full-screen Login/Sign Up page
-  if (!currentUser) {
-    return <LoginPage onAuthSuccess={handleAuthSuccess} initialTab={authModalTab} />;
-  }
+  // Active user account (fallback to Instant Guest if session initializing)
+  const activeUser: UserAccount = currentUser || {
+    id: 'usr_guest_instant',
+    name: 'VIP Guest Bettor',
+    email: 'guest@predictpro.ai',
+    phone: '+1 (555) 019-2834',
+    country: 'Global',
+    isVerified: true,
+    role: 'user',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    isAppInstalled: false,
+    bookmarkedMatchIds: []
+  };
 
   // 3. User is authenticated -> Render protected dashboard
   return (
@@ -881,6 +921,21 @@ export default function App() {
                     {finishedMatches.length}
                   </span>
                 </button>
+
+                <button
+                  onClick={() => setActiveTab('value')}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                    activeTab === 'value'
+                      ? 'bg-gradient-to-r from-amber-500 to-emerald-500 text-zinc-950 shadow-lg shadow-amber-500/25'
+                      : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                  <span>Value Bets (+EV)</span>
+                  <span className="px-2 py-0.5 text-xs font-mono font-bold rounded-full bg-black/40 text-amber-300 border border-amber-500/40">
+                    {valueBetMatches.length}
+                  </span>
+                </button>
               </div>
 
               {/* Direct Google Live Research Suite Launcher */}
@@ -940,6 +995,52 @@ export default function App() {
               </div>
             ) : (
               <>
+                {/* 0. VALUE BETS SECTION (Shown when Value tab is selected or in All) */}
+                {(activeTab === 'all' || activeTab === 'value') && valueBetMatches.length > 0 && (
+                  <section className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-amber-500/20 via-emerald-500/10 to-transparent p-4 rounded-2xl border border-amber-500/40 shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-md">
+                          <Sparkles className="w-5 h-5 animate-pulse" />
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-black text-white flex items-center gap-2">
+                            <span>🎯 Accurate Value Bets Detected (+EV)</span>
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold border border-amber-500/40">
+                              Dixon-Coles Positive Overlay
+                            </span>
+                          </h2>
+                          <p className="text-xs text-neutral-300 mt-0.5">
+                            High-confidence market opportunities where Dixon-Coles model probability exceeds closing bookmaker odds by &ge;5% with positive expected value.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right font-mono">
+                        <span className="text-xs text-amber-400 font-bold bg-black/40 px-3 py-1.5 rounded-xl border border-amber-500/30">
+                          {valueBetMatches.length} Value Bets Available
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      {valueBetMatches.map((match, idx) => (
+                        <React.Fragment key={`value-${match.id}-${idx}`}>
+                          <PredictionCard match={match} />
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {activeTab === 'value' && valueBetMatches.length === 0 && (
+                  <div className="text-center p-12 bg-neutral-900/80 border border-amber-500/20 rounded-2xl space-y-3">
+                    <Sparkles className="w-10 h-10 text-amber-400 mx-auto animate-pulse" />
+                    <h3 className="text-lg font-bold text-white">No +EV Value Bets Found for Active Filter</h3>
+                    <p className="text-xs text-neutral-400 max-w-md mx-auto">
+                      All currently filtered fixtures operate within normal statistical bookmaker margins. Switch to &ldquo;All Today&rsquo;s Fixtures&rdquo; to inspect all matches.
+                    </p>
+                  </div>
+                )}
+
                 {/* 1. TOP: Upcoming Matches Section */}
                 {(activeTab === 'all' || activeTab === 'upcoming') && (
                   <section className="space-y-4">

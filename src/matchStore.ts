@@ -25,6 +25,8 @@ import {
   TARGET_TIMEZONE
 } from './timezoneUtils';
 import { generateDailyFixturesForDate } from './dynamicFixtureEngine';
+import { computeComprehensiveAuditMetrics } from './services/calibrationAndMetricsEngine';
+import { globalHistoryStore } from './historyStore';
 
 export function normalizeTodayFixture(match: Match): Match {
   const dateInfo = getKampalaDateInfo();
@@ -668,19 +670,8 @@ export class MatchStore {
   public getAccuracyDashboard(): AccuracyDashboardPayload {
     this.reconcileAllFinishedMatches();
     const metrics = calculateAccuracyMetrics(this.auditLog);
-
-    // Compute calibration curves from actual historical audit data
-    const calibrationData = [
-      { prob_pred: 0.10, prob_true: 0.12 },
-      { prob_pred: 0.20, prob_true: 0.22 },
-      { prob_pred: 0.30, prob_true: 0.31 },
-      { prob_pred: 0.40, prob_true: 0.43 },
-      { prob_pred: 0.50, prob_true: 0.52 },
-      { prob_pred: 0.60, prob_true: 0.64 },
-      { prob_pred: 0.70, prob_true: 0.73 },
-      { prob_pred: 0.80, prob_true: 0.82 },
-      { prob_pred: 0.90, prob_true: 0.89 }
-    ];
+    const historyRecords = globalHistoryStore.getAllRecords();
+    const comprehensive = computeComprehensiveAuditMetrics(this.auditLog, historyRecords);
 
     return {
       ftStats: metrics.ftStats,
@@ -689,11 +680,15 @@ export class MatchStore {
       dataQuality: metrics.dataQuality,
       comparativeVerdict: metrics.comparativeVerdict,
       auditRecords: this.auditLog,
-      brierScoreFt: '0.1824',
-      brierScoreHt: '0.1412',
-      brierScoreDnb: '0.1250',
-      logLoss: '0.4120',
-      calibrationData,
+      brierScoreFt: comprehensive.brierScoreFt.toFixed(4),
+      brierScoreHt: comprehensive.brierScoreHt.toFixed(4),
+      brierScoreDnb: comprehensive.brierScoreDnb.toFixed(4),
+      logLoss: comprehensive.logLossFt.toFixed(4),
+      expectedCalibrationError: comprehensive.expectedCalibrationError,
+      calibrationBuckets: comprehensive.calibrationBuckets,
+      marketBreakdown: comprehensive.marketBreakdown,
+      overallRoi: comprehensive.overallRoi,
+      calibrationData: comprehensive.calibrationCurvePoints,
       lastReconciledAt: this.lastReconciledAt
     };
   }

@@ -12,10 +12,13 @@ import path from 'path';
 import type { HistoricalPredictionRecord, HistoricalStatsPayload } from './types';
 import { getKampalaTodayDateStr, getKampalaDateInfo } from './timezoneUtils';
 
-const DATA_DIR = process.env.VERCEL
-  ? '/tmp'
-  : path.join(process.cwd(), 'data');
-const HISTORY_FILE_PATH = path.join(DATA_DIR, 'prediction_history.json');
+const isNode = typeof window === 'undefined' && typeof process !== 'undefined' && !!process.versions?.node;
+const DATA_DIR = isNode && typeof path?.join === 'function' && typeof process?.cwd === 'function'
+  ? (process.env?.VERCEL ? '/tmp' : path.join(process.cwd(), 'data'))
+  : '';
+const HISTORY_FILE_PATH = isNode && typeof path?.join === 'function' && DATA_DIR
+  ? path.join(DATA_DIR, 'prediction_history.json')
+  : '';
 
 export class HistoryStore {
   private records: Map<string, HistoricalPredictionRecord> = new Map();
@@ -27,6 +30,7 @@ export class HistoryStore {
   }
 
   private ensureDataDirectory() {
+    if (!isNode || !fs || typeof fs.existsSync !== 'function' || !DATA_DIR) return;
     try {
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -38,29 +42,34 @@ export class HistoryStore {
 
   private loadFromDisk() {
     if (this.isLoaded) return;
-    try {
-      if (fs.existsSync(HISTORY_FILE_PATH)) {
-        const raw = fs.readFileSync(HISTORY_FILE_PATH, 'utf-8');
-        const list: HistoricalPredictionRecord[] = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          list.forEach((rec) => {
-            this.records.set(String(rec.id), rec);
-          });
+    if (isNode && fs && typeof fs.existsSync === 'function' && HISTORY_FILE_PATH) {
+      try {
+        if (fs.existsSync(HISTORY_FILE_PATH)) {
+          const raw = fs.readFileSync(HISTORY_FILE_PATH, 'utf-8');
+          const list: HistoricalPredictionRecord[] = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            list.forEach((rec) => {
+              this.records.set(String(rec.id), rec);
+            });
+          }
         }
+      } catch (err) {
+        console.warn('[HistoryStore] Error loading history from disk:', err);
       }
-    } catch (err) {
-      console.warn('[HistoryStore] Error loading history from disk:', err);
     }
 
     // If empty, seed initial authoritative historical predictions
     if (this.records.size === 0) {
       this.seedAuthoritativeHistory();
-      this.saveToDisk();
+      if (isNode) {
+        this.saveToDisk();
+      }
     }
     this.isLoaded = true;
   }
 
   private saveToDisk() {
+    if (!isNode || !fs || typeof fs.writeFileSync !== 'function' || !HISTORY_FILE_PATH) return;
     try {
       this.ensureDataDirectory();
       const list = Array.from(this.records.values()).sort(

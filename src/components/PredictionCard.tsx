@@ -32,7 +32,7 @@ export function PredictionCard({ match }: { match: Match }) {
     return null;
   }
 
-  const [activeView, setActiveView] = useState<'1x2' | 'dnb' | 'halftime' | 'intel'>('1x2');
+  const [activeView, setActiveView] = useState<'1x2' | 'dnb' | 'halftime' | 'value' | 'intel'>('1x2');
   const { prediction } = match;
   const f1x2 = prediction.fullTime1X2;
   const dnb = prediction.dnb;
@@ -261,6 +261,30 @@ export function PredictionCard({ match }: { match: Match }) {
             </button>
           </div>
         </div>
+
+        {/* Value Bet Alert Banner */}
+        {prediction.valueBet?.hasValue && (
+          <div
+            onClick={() => setActiveView('value')}
+            className="cursor-pointer bg-gradient-to-r from-amber-500/20 via-emerald-500/15 to-neutral-900/40 border border-amber-500/40 hover:border-amber-400 rounded-xl p-2.5 flex items-center justify-between gap-3 shadow-md transition-all"
+          >
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse flex-shrink-0" />
+              <div>
+                <span className="text-xs font-black text-amber-300 tracking-wide uppercase flex items-center gap-1.5">
+                  <span>💎 VALUE BET DETECTED:</span>
+                  <span className="text-white underline">{prediction.valueBet.selection}</span>
+                </span>
+                <p className="text-[11px] text-neutral-300 font-mono mt-0.5">
+                  Market: {prediction.valueBet.market} &bull; Edge: <strong className="text-emerald-400">+{prediction.valueBet.edgePercentage}% EV</strong> &bull; Sizing: {prediction.valueBet.recommendedStakeUnits}u
+                </p>
+              </div>
+            </div>
+            <span className="px-2 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-bold text-[10px] font-mono border border-amber-500/30 whitespace-nowrap">
+              Grade {prediction.valueBet.confidenceGrade} ↗
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Separate Market Navigation Tabs */}
@@ -315,6 +339,23 @@ export function PredictionCard({ match }: { match: Match }) {
             </span>
           </button>
 
+          {prediction.valueBet?.hasValue && (
+            <button
+              onClick={() => setActiveView('value')}
+              className={`pb-2 px-3 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border-b-2 transition-all whitespace-nowrap ${
+                activeView === 'value'
+                  ? 'border-amber-400 text-amber-300 bg-amber-500/10'
+                  : 'border-transparent text-amber-400 hover:text-amber-200'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span>Value Bet (+EV)</span>
+              <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded bg-amber-500/20 text-amber-300 font-mono border border-amber-500/40">
+                +{prediction.valueBet.edgePercentage}%
+              </span>
+            </button>
+          )}
+
           <button
             onClick={() => setActiveView('intel')}
             className={`pb-2 px-3 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 border-b-2 transition-colors whitespace-nowrap ${
@@ -340,6 +381,10 @@ export function PredictionCard({ match }: { match: Match }) {
             <ResultStatusBadge status={dnb?.predictionResult} marketLabel="DNB" marketType="dnb" />
           ) : activeView === 'halftime' ? (
             <ResultStatusBadge status={prediction.htPredictionResult} marketLabel="HT U1.5" marketType="halftime" />
+          ) : activeView === 'value' ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <Sparkles className="w-3 h-3 text-amber-400" /> +{prediction.valueBet?.edgePercentage}% Edge
+            </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
               <Globe className="w-3 h-3 text-blue-400" /> Google Search Live
@@ -711,6 +756,79 @@ export function PredictionCard({ match }: { match: Match }) {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Value Bet (+EV) Section */}
+      {activeView === 'value' && prediction.valueBet && (
+        <div className="p-4 space-y-4 bg-gradient-to-b from-amber-500/5 to-transparent">
+          <div className="p-4 rounded-2xl bg-neutral-900/90 border border-amber-500/40 space-y-4 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400 font-bold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Quantitative Edge Screener</span>
+                </span>
+                <h3 className="text-lg font-black text-white mt-1">
+                  {prediction.valueBet.selection}
+                </h3>
+                <span className="text-xs text-neutral-400">
+                  Target Market: <strong className="text-neutral-200">{prediction.valueBet.market}</strong>
+                </span>
+              </div>
+
+              <div className="text-right">
+                <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 inline-flex items-center gap-1">
+                  <span>+{prediction.valueBet.edgePercentage}% Expected Edge</span>
+                </span>
+                <div className="text-[11px] font-mono text-neutral-400 mt-1">
+                  Confidence: <span className="text-amber-400 font-bold">Grade {prediction.valueBet.confidenceGrade}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Matrix of Odds & Model Statistics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
+              <div className="p-3 rounded-xl bg-black/50 border border-white/5">
+                <span className="block text-[10px] uppercase font-mono text-neutral-400">Model Probability</span>
+                <span className="text-base font-mono font-bold text-emerald-400">
+                  {(prediction.valueBet.modelProbability * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-black/50 border border-white/5">
+                <span className="block text-[10px] uppercase font-mono text-neutral-400">Calculated Fair Odds</span>
+                <span className="text-base font-mono font-bold text-neutral-200">
+                  {prediction.valueBet.fairOdds.toFixed(2)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-black/50 border border-white/5">
+                <span className="block text-[10px] uppercase font-mono text-neutral-400">Market Estimate</span>
+                <span className="text-base font-mono font-bold text-amber-300">
+                  {prediction.valueBet.marketOdds.toFixed(2)}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-black/50 border border-emerald-500/30">
+                <span className="block text-[10px] uppercase font-mono text-neutral-400">Recommended Stake</span>
+                <span className="text-base font-mono font-bold text-emerald-300">
+                  {prediction.valueBet.recommendedStakeUnits} Units
+                </span>
+              </div>
+            </div>
+
+            {/* Analysis Rationale */}
+            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 text-xs text-neutral-300 leading-relaxed space-y-1.5">
+              <p className="font-semibold text-amber-300 flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-amber-400" />
+                <span>Dixon-Coles Positive Expected Value (+EV) Thesis:</span>
+              </p>
+              <p>{prediction.valueBet.reasoning}</p>
+              <p className="text-[11px] text-neutral-400 font-mono pt-1">
+                Math: Expected Value EV = (P &times; Odds) - 1 = +{(prediction.valueBet.expectedValue * 100).toFixed(1)}%.
+              </p>
             </div>
           </div>
         </div>

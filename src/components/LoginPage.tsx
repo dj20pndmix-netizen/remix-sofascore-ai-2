@@ -558,6 +558,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 )}
               </button>
 
+              <div className="pt-2 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleGuestLogin}
+                  disabled={loading}
+                  className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 hover:border-emerald-500/50 text-emerald-300 hover:text-emerald-200 rounded-xl font-bold text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>⚡ Instant Guest Access (No Signup Needed)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleMasterAdminLogin}
+                  disabled={loading}
+                  className="w-full py-2 bg-zinc-900 hover:bg-zinc-850 border border-amber-500/30 hover:border-amber-500/60 text-amber-300 hover:text-amber-200 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                  <span>👑 1-Click Master Admin Demo</span>
+                </button>
+              </div>
+
               <div className="text-center pt-2">
                 <p className="text-xs text-zinc-400">
                   Don't have an account?{' '}

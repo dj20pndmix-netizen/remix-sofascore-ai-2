@@ -55,6 +55,20 @@ export interface DnbPrediction {
   verifiedFtScore?: string;
 }
 
+export interface ValueBetDetail {
+  hasValue: boolean;
+  market: string; // e.g. "Full-Time 1X2", "Over 2.5 Goals", "Both Teams to Score", "Draw No Bet"
+  selection: string; // e.g. "Arsenal Win", "Over 2.5 Goals"
+  modelProbability: number; // 0.00 - 1.00
+  fairOdds: number; // 1 / modelProbability
+  marketOdds: number; // Simulated closing market odds
+  edgePercentage: number; // e.g. +14.5%
+  expectedValue: number; // e.g. +0.145
+  recommendedStakeUnits: number; // e.g. 1.5 units
+  confidenceGrade: 'A+' | 'A' | 'B+' | 'B';
+  reasoning: string;
+}
+
 export interface Prediction {
   market: string; // e.g. "HT Under 1.5 Goals", "HT Over 0.5 Goals", "HT Correct Score"
   outcome: string; // e.g. "Under 1.5", "Over 0.5", "0-0"
@@ -67,6 +81,7 @@ export interface Prediction {
   predictionResult?: 'won' | 'lost' | 'pending' | 'needs_review';
   fullTime1X2?: FullTime1X2Prediction;
   dnb?: DnbPrediction;
+  valueBet?: ValueBetDetail;
   
   // Independent Half-Time Evaluation Fields
   htPredictionResult?: 'won' | 'lost' | 'pending' | 'needs_review';
@@ -314,6 +329,29 @@ export interface AccuracyAuditRecord {
   resultVersion: number;
 }
 
+export interface CalibrationBucket {
+  range: string; // e.g. "50–55%"
+  minProb: number;
+  maxProb: number;
+  predictedProbability: number;
+  actualWinRate: number;
+  predictionCount: number;
+  calibrationError: number;
+}
+
+export interface DetailedMarketMetrics {
+  market: string;
+  total: number;
+  correct: number;
+  accuracy: number;
+  precision: number;
+  recall: number;
+  f1: number;
+  brierScore: number;
+  logLoss: number;
+  roiPercentage: number;
+}
+
 export interface AccuracyDashboardPayload {
   ftStats: MarketAccuracyStats;
   htStats: MarketAccuracyStats;
@@ -329,6 +367,10 @@ export interface AccuracyDashboardPayload {
   brierScoreHt: string;
   brierScoreDnb: string;
   logLoss: string;
+  expectedCalibrationError?: number;
+  calibrationBuckets?: CalibrationBucket[];
+  marketBreakdown?: Record<string, DetailedMarketMetrics>;
+  overallRoi?: number;
   calibrationData: { prob_pred: number; prob_true: number }[];
   lastReconciledAt: string;
 }
