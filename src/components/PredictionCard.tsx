@@ -66,7 +66,7 @@ export function PredictionCard({ match }: { match: Match }) {
     }
 
     // Auto-resolve outcome from match scores if status is missing
-    let resolvedStatus: 'won' | 'lost' | 'void' | 'needs_review' | undefined = status;
+    let resolvedStatus: 'won' | 'lost' | 'void' | 'pending' | 'needs_review' | 'no_pick' | undefined = status;
     const vs = match.verifiedScores;
     const [scH, scA] = (match.currentScore || '').split('-').map(s => parseInt(s.trim(), 10));
     const ftH = vs?.fullTimeHome ?? (!isNaN(scH) ? scH : null);

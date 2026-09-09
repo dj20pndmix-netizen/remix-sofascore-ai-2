@@ -7,9 +7,9 @@
  * Across verified historical out-of-sample fixtures strictly using pre-match data.
  */
 
-import { solveQuantitativeModel } from './src/services/quantitativeModelEngine';
-import { globalHistoryStore } from './src/historyStore';
-import { globalMatchStore } from './src/matchStore';
+import { solveQuantitativeModel } from '../src/services/quantitativeModelEngine';
+import { globalHistoryStore } from '../src/historyStore';
+import { globalMatchStore } from '../src/matchStore';
 
 interface BacktestMatchRecord {
   id: number;

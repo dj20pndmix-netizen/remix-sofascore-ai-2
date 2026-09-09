@@ -1305,10 +1305,15 @@ export const KNOWN_TEAM_ROSTERS: Record<string, TeamRosterProfile> = {
 /**
  * Generates a realistic structured roster for any unindexed squad
  */
-export function createGenericRosterWithRealNames(teamName: string, seed: number): TeamRosterProfile {
+export function createGenericRosterWithRealNames(teamName: string, seed: number | string = 1): TeamRosterProfile {
+  const numericSeed = typeof seed === 'number' 
+    ? seed 
+    : (seed.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) || 1);
   const pseudoRandom = (val: number) => ((val * 9301 + 49297) % 233280) / 233280;
   const formations = ['4-3-3', '4-2-3-1', '3-5-2', '4-4-2'];
-  const formation = formations[Math.floor(pseudoRandom(seed) * formations.length)];
+  const formation = typeof seed === 'string' && formations.includes(seed) 
+    ? seed 
+    : formations[Math.floor(pseudoRandom(numericSeed) * formations.length)];
 
   return {
     manager: `${teamName} Head Coach`,

@@ -61006,10 +61006,11 @@ var KNOWN_TEAM_ROSTERS = {
     tacticalNotes: "High possession style with inverted wing-backs and swift vertical combinations through Dibling and Fernandes."
   }
 };
-function createGenericRosterWithRealNames(teamName, seed) {
+function createGenericRosterWithRealNames(teamName, seed = 1) {
+  const numericSeed = typeof seed === "number" ? seed : seed.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) || 1;
   const pseudoRandom = (val) => (val * 9301 + 49297) % 233280 / 233280;
   const formations = ["4-3-3", "4-2-3-1", "3-5-2", "4-4-2"];
-  const formation = formations[Math.floor(pseudoRandom(seed) * formations.length)];
+  const formation = typeof seed === "string" && formations.includes(seed) ? seed : formations[Math.floor(pseudoRandom(numericSeed) * formations.length)];
   return {
     manager: `${teamName} Head Coach`,
     formation,

@@ -49,7 +49,11 @@ export function evaluatePickOutcome(
 ): { outcome: 'WON' | 'LOST' | 'VOID' | 'LIVE' | 'UPCOMING'; scoreString: string } {
   if (!matchObj) {
     if (pick.reconciliation?.outcome) {
-      return { outcome: pick.reconciliation.outcome, scoreString: pick.reconciliation.settledScore || 'FT' };
+      const recOutcome = pick.reconciliation.outcome;
+      return { 
+        outcome: recOutcome === 'PENDING' ? 'UPCOMING' : recOutcome, 
+        scoreString: pick.reconciliation.settledScore || 'FT' 
+      };
     }
     return { outcome: 'UPCOMING', scoreString: '-:-' };
   }
@@ -71,7 +75,7 @@ export function evaluatePickOutcome(
   const pickText = (pick.pick || '').toLowerCase();
 
   // Match Winner (1X2)
-  if (mType === 'MATCH_WINNER_1X2') {
+  if (mType === '1X2') {
     if (pickText.includes('home') || pick.pick === '1' || pickText.includes(matchObj.homeTeam.name.toLowerCase())) {
       return { outcome: h > a ? 'WON' : 'LOST', scoreString: score };
     }
@@ -84,7 +88,7 @@ export function evaluatePickOutcome(
   }
 
   // Draw No Bet
-  if (mType === 'DRAW_NO_BET') {
+  if (mType === 'DNB') {
     if (h === a) {
       return { outcome: 'VOID', scoreString: score };
     }
@@ -113,7 +117,7 @@ export function evaluatePickOutcome(
   }
 
   // Both Teams To Score
-  if (mType === 'BOTH_TEAMS_TO_SCORE') {
+  if (mType === 'BTTS') {
     const isBtts = h > 0 && a > 0;
     if (pickText.includes('yes')) return { outcome: isBtts ? 'WON' : 'LOST', scoreString: score };
     if (pickText.includes('no')) return { outcome: !isBtts ? 'WON' : 'LOST', scoreString: score };
