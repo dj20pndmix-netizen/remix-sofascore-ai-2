@@ -679,7 +679,7 @@ export default function App() {
         {mainView === 'ai-bot' ? (
           <AiPredictionBotView matches={deduplicatedMatches} onRefreshFeed={() => fetchAllMatches(true)} />
         ) : mainView === 'history' ? (
-          <PredictionHistoryView />
+          <PredictionHistoryView matches={deduplicatedMatches} onRefreshFeed={() => fetchAllMatches(true)} />
         ) : mainView === 'accuracy' ? (
           <AccuracyDashboard />
         ) : mainView === 'admin' ? (

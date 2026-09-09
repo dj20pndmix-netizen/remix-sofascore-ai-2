@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import type { HistoricalPredictionRecord, HistoricalStatsPayload } from '../types';
+import type { HistoricalPredictionRecord, HistoricalStatsPayload, Match } from '../types';
 import {
   Trophy,
   CheckCircle2,
@@ -30,7 +30,12 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 
-export function PredictionHistoryView() {
+interface PredictionHistoryViewProps {
+  matches?: Match[];
+  onRefreshFeed?: () => void;
+}
+
+export function PredictionHistoryView({ matches, onRefreshFeed }: PredictionHistoryViewProps = {}) {
   const [historyData, setHistoryData] = useState<HistoricalStatsPayload>({
     totalSettled: 0,
     totalWon: 0,
@@ -42,16 +47,41 @@ export function PredictionHistoryView() {
     records: []
   });
   const [loading, setLoading] = useState(false);
+  const [lastSynced, setLastSynced] = useState<string>('');
   const [filterOutcome, setFilterOutcome] = useState<'ALL' | 'WON' | 'LOST' | 'VOID'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchHistory = async () => {
+  const fetchHistory = async (forceSync = false) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/history');
+      // 1. If matches with finished status exist, sync them to backend history ledger
+      const finishedMatches = matches ? matches.filter(m => m.status === 'finished' || m.time === 'FT') : [];
+      if (forceSync || finishedMatches.length > 0) {
+        try {
+          const syncRes = await fetch('/api/history/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ matches: finishedMatches })
+          });
+          if (syncRes.ok) {
+            const data = await syncRes.json();
+            if (data.stats) {
+              setHistoryData(data.stats);
+              setLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+              return;
+            }
+          }
+        } catch (syncErr) {
+          console.warn('[PredictionHistoryView] POST /api/history/sync notice, falling back to GET:', syncErr);
+        }
+      }
+
+      // 2. Fallback to GET /api/history with auto-sync parameter
+      const res = await fetch(`/api/history?sync=${forceSync ? 'true' : 'false'}`);
       if (res.ok) {
         const data = await res.json();
         setHistoryData(data);
+        setLastSynced(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       }
     } catch (err) {
       console.error('Error fetching prediction history:', err);
@@ -60,11 +90,25 @@ export function PredictionHistoryView() {
     }
   };
 
+  const handleManualSync = async () => {
+    if (onRefreshFeed) {
+      onRefreshFeed();
+    }
+    await fetchHistory(true);
+  };
+
   useEffect(() => {
-    fetchHistory();
-    const interval = setInterval(fetchHistory, 15000);
+    fetchHistory(true);
+    const interval = setInterval(() => fetchHistory(true), 15000);
     return () => clearInterval(interval);
   }, []);
+
+  // Whenever live match feed updates and contains finished games, auto-sync immediately
+  useEffect(() => {
+    if (matches && matches.some(m => m.status === 'finished' || m.time === 'FT')) {
+      fetchHistory(false);
+    }
+  }, [matches?.length]);
 
   const filteredRecords = historyData.records.filter((rec) => {
     if (filterOutcome !== 'ALL' && rec.outcome !== filterOutcome) {
@@ -131,12 +175,18 @@ export function PredictionHistoryView() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-black text-white tracking-tight">Prediction History &amp; Outcome Ledger</h1>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono">
-                  PERSISTENT SQLITE
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  AUTO-SYNCED LEDGER
                 </span>
               </div>
               <p className="text-neutral-400 text-xs mt-0.5">
                 Authoritative record of all past AI match predictions, verified outcomes, win rates, and return units.
+                {lastSynced && (
+                  <span className="text-emerald-400/90 ml-1.5 font-mono">
+                    (Auto-synced at {lastSynced})
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -152,7 +202,7 @@ export function PredictionHistoryView() {
             </button>
 
             <button
-              onClick={fetchHistory}
+              onClick={handleManualSync}
               disabled={loading}
               className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50"
             >

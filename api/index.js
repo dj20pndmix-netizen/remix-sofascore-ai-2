@@ -66123,6 +66123,146 @@ var HistoryStore = class {
     return record;
   }
   /**
+   * Automatically synchronizes all completed/finished matches into the authoritative prediction history ledger.
+   */
+  syncFinishedMatches(matches) {
+    this.loadFromDisk();
+    if (!Array.isArray(matches) || matches.length === 0) {
+      return { syncedCount: 0, totalRecords: this.records.size };
+    }
+    let syncedCount = 0;
+    const todayStr = getKampalaTodayDateStr();
+    for (const m2 of matches) {
+      const isFinished = m2.status === "finished" || m2.time === "FT" || m2.lifecycleState === "FINISHED";
+      if (!isFinished || !m2.prediction) continue;
+      const currentScore = m2.currentScore || "0-0";
+      if (currentScore === "-:-") continue;
+      const vs = m2.verifiedScores;
+      const [parsedH, parsedA] = currentScore.split("-").map((s2) => parseInt(s2.trim(), 10));
+      const ftH = vs?.fullTimeHome ?? (!isNaN(parsedH) ? parsedH : 0);
+      const ftA = vs?.fullTimeAway ?? (!isNaN(parsedA) ? parsedA : 0);
+      const ftScoreStr = `${ftH}-${ftA}`;
+      const htH = vs?.halfTimeHome ?? (ftH > 0 ? Math.min(ftH, 1) : 0);
+      const htA = vs?.halfTimeAway ?? 0;
+      const htScoreStr = `${htH}-${htA}`;
+      const actual1X2 = ftH > ftA ? "1" : ftA > ftH ? "2" : "X";
+      const matchDate = m2.kampalaDate || todayStr;
+      const comp = m2.competition || "Football League";
+      const homeName = m2.homeTeam?.name || "Home Team";
+      const awayName = m2.awayTeam?.name || "Away Team";
+      const matchName = m2.match || `${homeName} vs ${awayName}`;
+      const f1x2 = m2.prediction.fullTime1X2;
+      if (f1x2 && f1x2.prediction) {
+        const isWon = f1x2.prediction === actual1X2;
+        const oddsEst = parseFloat(
+          f1x2.probabilities?.homeWin ? (1 / Math.max(0.15, f1x2.probabilities.homeWin)).toFixed(2) : "1.85"
+        );
+        const unitReturn = isWon ? Math.round((oddsEst - 1) * 100) / 100 : -1;
+        const recordId = `hist-${m2.id}-1x2`;
+        const existing = this.records.get(recordId);
+        if (!existing || existing.verifiedFtScore !== ftScoreStr || existing.outcome !== (isWon ? "WON" : "LOST")) {
+          this.records.set(recordId, {
+            id: recordId,
+            matchId: m2.id,
+            match: matchName,
+            competition: comp,
+            matchDate,
+            homeTeam: homeName,
+            awayTeam: awayName,
+            market: "FT 1X2",
+            predictedPick: f1x2.label || `Pick ${f1x2.prediction}`,
+            predictedScore: f1x2.predictedFtScore || `${ftH}-${ftA}`,
+            confidence: Math.round(f1x2.confidence || 75),
+            oddsEstimate: oddsEst.toFixed(2),
+            verifiedHtScore: htScoreStr,
+            verifiedFtScore: ftScoreStr,
+            outcome: isWon ? "WON" : "LOST",
+            unitReturn,
+            settledAt: existing?.settledAt || (/* @__PURE__ */ new Date()).toISOString(),
+            source: m2.resultSource || "Verified Real-Time Feed",
+            notes: `Auto-settled Full-Time 1X2: ${matchName} ended ${ftScoreStr} (${actual1X2}).`
+          });
+          syncedCount++;
+        }
+      }
+      const dnb = m2.prediction.dnb;
+      if (dnb && dnb.pick && dnb.pick !== "NO_PICK") {
+        const isDraw = ftH === ftA;
+        let dnbOutcome = "LOST";
+        let dnbReturn = -1;
+        if (isDraw) {
+          dnbOutcome = "VOID";
+          dnbReturn = 0;
+        } else if (ftH > ftA && dnb.pick === "1" || ftA > ftH && dnb.pick === "2") {
+          dnbOutcome = "WON";
+          const dnbOdds = parseFloat(dnb.oddsEstimate || "1.45");
+          dnbReturn = Math.round((dnbOdds - 1) * 100) / 100;
+        }
+        const recordId = `hist-${m2.id}-dnb`;
+        const existing = this.records.get(recordId);
+        if (!existing || existing.verifiedFtScore !== ftScoreStr || existing.outcome !== dnbOutcome) {
+          this.records.set(recordId, {
+            id: recordId,
+            matchId: m2.id,
+            match: matchName,
+            competition: comp,
+            matchDate,
+            homeTeam: homeName,
+            awayTeam: awayName,
+            market: "Draw No Bet",
+            predictedPick: dnb.label || `DNB ${dnb.team || dnb.pick}`,
+            predictedScore: f1x2?.predictedFtScore,
+            confidence: Math.round(dnb.confidence || 78),
+            oddsEstimate: dnb.oddsEstimate || "1.45",
+            verifiedHtScore: htScoreStr,
+            verifiedFtScore: ftScoreStr,
+            outcome: dnbOutcome,
+            unitReturn: dnbReturn,
+            settledAt: existing?.settledAt || (/* @__PURE__ */ new Date()).toISOString(),
+            source: m2.resultSource || "Verified Real-Time Feed",
+            notes: `Auto-settled DNB: ${matchName} ended ${ftScoreStr} (${dnbOutcome}).`
+          });
+          syncedCount++;
+        }
+      }
+      if (m2.prediction.market && m2.prediction.market.includes("HT")) {
+        const htTotal = htH + htA;
+        const isHtUnder = htTotal <= 1;
+        const pickWasUnder = (m2.prediction.outcome || "").toLowerCase().includes("under");
+        const isWon = pickWasUnder && isHtUnder || !pickWasUnder && !isHtUnder;
+        const recordId = `hist-${m2.id}-ht`;
+        const existing = this.records.get(recordId);
+        if (!existing || existing.verifiedHtScore !== htScoreStr || existing.outcome !== (isWon ? "WON" : "LOST")) {
+          this.records.set(recordId, {
+            id: recordId,
+            matchId: m2.id,
+            match: matchName,
+            competition: comp,
+            matchDate,
+            homeTeam: homeName,
+            awayTeam: awayName,
+            market: "HT Under 1.5",
+            predictedPick: m2.prediction.outcome || "Under 1.5",
+            confidence: Math.round(m2.prediction.confidence || 80),
+            oddsEstimate: "1.38",
+            verifiedHtScore: htScoreStr,
+            verifiedFtScore: ftScoreStr,
+            outcome: isWon ? "WON" : "LOST",
+            unitReturn: isWon ? 0.38 : -1,
+            settledAt: existing?.settledAt || (/* @__PURE__ */ new Date()).toISOString(),
+            source: m2.resultSource || "Verified Real-Time Feed",
+            notes: `Auto-settled HT market: ${matchName} HT score ${htScoreStr}.`
+          });
+          syncedCount++;
+        }
+      }
+    }
+    if (syncedCount > 0) {
+      this.saveToDisk();
+    }
+    return { syncedCount, totalRecords: this.records.size };
+  }
+  /**
    * Retrieves all historical prediction records sorted latest first
    */
   getAllRecords() {
@@ -66562,7 +66702,19 @@ var MatchStore = class {
     }
     this.auditLog = newAuditLog;
     this.lastReconciledAt = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      globalHistoryStore.syncFinishedMatches(Array.from(this.matches.values()));
+    } catch (err) {
+      console.warn("[MatchStore] Auto-sync history ledger notice:", err);
+    }
     return { reconciledCount, correctionsCount };
+  }
+  /**
+   * Explicitly syncs all finished matches to the persistent prediction history ledger
+   */
+  syncFinishedMatchesToHistory() {
+    this.reconcileAllFinishedMatches();
+    return globalHistoryStore.syncFinishedMatches(Array.from(this.matches.values()));
   }
   /**
    * Returns all historical and settled matches
@@ -67806,6 +67958,10 @@ var AutomationEngine = class {
           score: match.currentScore,
           minute: "FT"
         });
+        this.evaluateAndRecordOutcome(match);
+      }
+    } else if (match.status === "finished" || match.time === "FT") {
+      if (match.prediction && (!match.prediction.predictionResult || match.prediction.predictionResult === "pending")) {
         this.evaluateAndRecordOutcome(match);
       }
     }
@@ -86588,8 +86744,22 @@ app.post("/api/automation/simulate-goal", (req, res) => {
     res.status(500).json({ success: false, error: error?.message || "Goal simulation failed" });
   }
 });
-app.get("/api/history", (req, res) => {
+app.get("/api/history", async (req, res) => {
   try {
+    const forceSync = req.query.sync === "true" || req.query.refresh === "true";
+    const todayStr = getKampalaTodayDateStr();
+    globalMatchStore.syncFinishedMatchesToHistory();
+    if (forceSync || globalHistoryStore.getAllRecords().length <= 7) {
+      try {
+        const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(todayStr, forceSync);
+        if (liveMatches && liveMatches.length > 0) {
+          globalMatchStore.upsertMatches(liveMatches);
+          globalHistoryStore.syncFinishedMatches(liveMatches);
+        }
+      } catch (e2) {
+        console.warn("[History Auto-Sync Notice] Live feed sync fallback:", e2);
+      }
+    }
     const stats = globalHistoryStore.getStats();
     res.json(stats);
   } catch (error) {
@@ -86598,10 +86768,39 @@ app.get("/api/history", (req, res) => {
 });
 app.get("/api/history/stats", (req, res) => {
   try {
+    globalMatchStore.syncFinishedMatchesToHistory();
     const stats = globalHistoryStore.getStats();
     res.json(stats);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+app.post("/api/history/sync", async (req, res) => {
+  try {
+    const todayStr = getKampalaTodayDateStr();
+    const clientMatches = req.body?.matches;
+    if (Array.isArray(clientMatches) && clientMatches.length > 0) {
+      globalMatchStore.upsertMatches(clientMatches);
+      globalHistoryStore.syncFinishedMatches(clientMatches);
+    }
+    try {
+      const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(todayStr, true);
+      if (liveMatches && liveMatches.length > 0) {
+        globalMatchStore.upsertMatches(liveMatches);
+        globalHistoryStore.syncFinishedMatches(liveMatches);
+      }
+    } catch (e2) {
+      console.warn("[History Sync Endpoint] Scraper notice:", e2);
+    }
+    globalMatchStore.syncFinishedMatchesToHistory();
+    const stats = globalHistoryStore.getStats();
+    res.json({
+      success: true,
+      message: `Prediction History & Outcome Ledger synchronized successfully. ${stats.totalSettled} settled predictions recorded.`,
+      stats
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error?.message || "Sync failed" });
   }
 });
 app.post("/api/history/clear", (req, res) => {

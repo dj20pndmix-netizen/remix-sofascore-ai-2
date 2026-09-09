@@ -496,7 +496,23 @@ export class MatchStore {
 
     this.auditLog = newAuditLog;
     this.lastReconciledAt = new Date().toISOString();
+
+    // Automatically sync all finished matches into the persistent prediction history & outcome ledger
+    try {
+      globalHistoryStore.syncFinishedMatches(Array.from(this.matches.values()));
+    } catch (err) {
+      console.warn('[MatchStore] Auto-sync history ledger notice:', err);
+    }
+
     return { reconciledCount, correctionsCount };
+  }
+
+  /**
+   * Explicitly syncs all finished matches to the persistent prediction history ledger
+   */
+  public syncFinishedMatchesToHistory(): { syncedCount: number; totalRecords: number } {
+    this.reconcileAllFinishedMatches();
+    return globalHistoryStore.syncFinishedMatches(Array.from(this.matches.values()));
   }
 
   /**

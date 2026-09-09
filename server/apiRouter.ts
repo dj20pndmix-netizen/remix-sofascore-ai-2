@@ -142,9 +142,28 @@ app.post('/api/automation/simulate-goal', (req, res) => {
   }
 });
 
-// Persistent History
-app.get('/api/history', (req, res) => {
+// Persistent Prediction History & Outcomes Ledger with Auto-Sync
+app.get('/api/history', async (req, res) => {
   try {
+    const forceSync = req.query.sync === 'true' || req.query.refresh === 'true';
+    const todayStr = getKampalaTodayDateStr();
+
+    // 1. Sync finished matches from memory store
+    globalMatchStore.syncFinishedMatchesToHistory();
+
+    // 2. If sync explicitly requested or history ledger has only initial seeds, trigger live scoreboard to capture all today's finished matches
+    if (forceSync || globalHistoryStore.getAllRecords().length <= 7) {
+      try {
+        const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(todayStr, forceSync);
+        if (liveMatches && liveMatches.length > 0) {
+          globalMatchStore.upsertMatches(liveMatches);
+          globalHistoryStore.syncFinishedMatches(liveMatches);
+        }
+      } catch (e) {
+        console.warn('[History Auto-Sync Notice] Live feed sync fallback:', e);
+      }
+    }
+
     const stats = globalHistoryStore.getStats();
     res.json(stats);
   } catch (error) {
@@ -154,10 +173,44 @@ app.get('/api/history', (req, res) => {
 
 app.get('/api/history/stats', (req, res) => {
   try {
+    globalMatchStore.syncFinishedMatchesToHistory();
     const stats = globalHistoryStore.getStats();
     res.json(stats);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// Dedicated Auto-Sync Endpoint for the Prediction History & Outcome Ledger
+app.post('/api/history/sync', async (req, res) => {
+  try {
+    const todayStr = getKampalaTodayDateStr();
+    const clientMatches = req.body?.matches as Match[] | undefined;
+
+    if (Array.isArray(clientMatches) && clientMatches.length > 0) {
+      globalMatchStore.upsertMatches(clientMatches);
+      globalHistoryStore.syncFinishedMatches(clientMatches);
+    }
+
+    try {
+      const liveMatches = await globalLiveScoreboard.fetchRealLiveMatches(todayStr, true);
+      if (liveMatches && liveMatches.length > 0) {
+        globalMatchStore.upsertMatches(liveMatches);
+        globalHistoryStore.syncFinishedMatches(liveMatches);
+      }
+    } catch (e) {
+      console.warn('[History Sync Endpoint] Scraper notice:', e);
+    }
+
+    globalMatchStore.syncFinishedMatchesToHistory();
+    const stats = globalHistoryStore.getStats();
+    res.json({
+      success: true,
+      message: `Prediction History & Outcome Ledger synchronized successfully. ${stats.totalSettled} settled predictions recorded.`,
+      stats
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Sync failed' });
   }
 });
 

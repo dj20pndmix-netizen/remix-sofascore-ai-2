@@ -483,6 +483,10 @@ export class AutomationEngine {
         // Evaluate predictions and dispatch WON/LOST outcome alerts & record in history database
         this.evaluateAndRecordOutcome(match);
       }
+    } else if (match.status === 'finished' || match.time === 'FT') {
+      if (match.prediction && (!match.prediction.predictionResult || match.prediction.predictionResult === 'pending')) {
+        this.evaluateAndRecordOutcome(match);
+      }
     }
     this.previousStatuses.set(match.id, match.status);
 
