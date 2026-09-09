@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "id": "inst_1788335868673_4t8i",
+    "timestamp": "2026-09-02T07:57:48.673Z",
+    "userId": "admin_dj20pndmix",
+    "userEmail": "dj20pndmix@gmail.com",
+    "userName": "Master Admin",
+    "platform": "Windows",
+    "browser": "Chrome",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+    "ipAddress": "127.0.0.1",
+    "installOutcome": "ACCEPTED",
+    "referrer": "Direct PWA Prompt"
+  }
+]

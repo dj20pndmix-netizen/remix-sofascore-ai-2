@@ -167,11 +167,12 @@ export default function App() {
 
       const data = await response.json();
       if (Array.isArray(data)) {
-        // DOUBLE DATE VALIDATION: Accept fixtures matching the active date
-        const validated = data.filter((m: Match) => {
+        // Double Date Validation: Accept fixtures matching the active date or live in-play
+        const dateMatched = data.filter((m: Match) => {
           const matchDate = m.kampalaDate || targetDate;
-          return matchDate === targetDate;
+          return matchDate === targetDate || m.status === 'live';
         });
+        const validated = dateMatched.length > 0 ? dateMatched : data;
 
         globalMatchStore.upsertMatches(validated);
         setAllMatches(validated);
@@ -252,31 +253,36 @@ export default function App() {
     setShowNotificationBanner(false);
   };
 
-  // DOUBLE DATE VALIDATION & DEDUPLICATION: Strict enforcement of the active date
+  // DOUBLE DATE VALIDATION & DEDUPLICATION: Real-time match filter
   const deduplicatedMatches = React.useMemo(() => {
-    const seenTeams = new Set<string>();
+    const seenMatchKeys = new Set<string>();
     const result: Match[] = [];
     const targetDate = activeDateEAT || getKampalaTodayDateStr();
 
-    // Filter strictly for the active date
+    // Filter strictly for the active date or live in-play matches
     const targetMatches = allMatches.filter((m) => {
       const matchDate = m.kampalaDate || targetDate;
-      return matchDate === targetDate;
+      return matchDate === targetDate || m.status === 'live';
     });
 
-    // Prioritize Upcoming kickoffs first, then Live in-play, then Finished
+    // Prioritize Live in-play first, then Upcoming kickoffs by time, then Finished
     const sorted = [...targetMatches].sort((a, b) => {
-      const statusWeight = (s: string) => (s === 'upcoming' ? 1 : s === 'live' ? 2 : 3);
-      return statusWeight(a.status) - statusWeight(b.status);
+      const statusWeight = (s: string) => (s === 'live' ? 0 : s === 'upcoming' ? 1 : 2);
+      if (statusWeight(a.status) !== statusWeight(b.status)) {
+        return statusWeight(a.status) - statusWeight(b.status);
+      }
+      return 0;
     });
 
     for (const m of sorted) {
       const normalized = normalizeTodayFixture(m);
       const home = normalized.homeTeam?.name?.toLowerCase().trim() || '';
       const away = normalized.awayTeam?.name?.toLowerCase().trim() || '';
-      if (home && away && !seenTeams.has(home) && !seenTeams.has(away)) {
-        seenTeams.add(home);
-        seenTeams.add(away);
+      const matchKey = `${normalized.id}_${home}_${away}`;
+      const pairKey = `${home}_${away}`;
+      if (home && away && !seenMatchKeys.has(matchKey) && !seenMatchKeys.has(pairKey)) {
+        seenMatchKeys.add(matchKey);
+        seenMatchKeys.add(pairKey);
         result.push(normalized);
       }
     }

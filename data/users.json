@@ -10,11 +10,12 @@
     "role": "admin",
     "status": "active",
     "createdAt": "2026-08-01T00:00:00.000Z",
-    "lastLoginAt": "2026-09-01T12:51:31.924Z",
+    "lastLoginAt": "2026-09-02T08:24:39.053Z",
     "isAppInstalled": true,
     "customNotes": "Authoritative Master Administrator",
     "lastIp": "127.0.0.1",
-    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+    "userAgent": "axios/1.13.5",
+    "installedAt": "2026-09-02T07:57:48.673Z"
   },
   {
     "id": "usr_1787980280990_nes6f",
@@ -80,7 +81,7 @@
     "role": "user",
     "status": "active",
     "createdAt": "2026-09-01T04:19:15.233Z",
-    "lastLoginAt": "2026-09-01T04:19:15.233Z",
+    "lastLoginAt": "2026-09-02T08:24:38.991Z",
     "lastIp": "127.0.0.1",
     "userAgent": "Web Browser",
     "isAppInstalled": false,
