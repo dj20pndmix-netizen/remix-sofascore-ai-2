@@ -51,3 +51,19 @@
   • Norwich vs Birmingham (Championship • 21:45 EAT)
   • Charlton vs QPR (Championship • 22:00 EAT)
 ```
+
+---
+
+## 🌐 Production Deployment Verification (`https://sofascore-ai-predictpro.vercel.app`)
+- **Git Tracking Branch**: `main` synced with `origin/main` (`dj20pndmix-netizen/remix-sofascore-ai-2.git`)
+- **Serverless API Engine**: Bundled in `api/index.js` via automated cross-platform build script `scripts/build.js`
+- **In-Memory Historical Ledger**: Bundled 670+ historical predictions in `src/data/historicalSeeds.ts` for instant cold-boot loading with zero disk dependency
+- **Live Endpoint Verification**:
+  - `GET /api/health`: Returns HTTP 200 with `Africa/Kampala` timezone anchor.
+  - `GET /api/all-matches`: Returns HTTP 200 with 300+ live matches playing today.
+  - `POST /api/auth/guest-login`: Returns HTTP 200 with valid JWT session.
+  - `POST /api/auth/login`: Returns HTTP 200 for master admin authentication.
+  - `GET /api/admin/metrics`: Returns HTTP 200 with secured system stats.
+  - `GET /api/automation/status`: Returns HTTP 200 with active engine state.
+  - `GET /api/history/stats`: Returns HTTP 200 with full historical prediction ledger and ROI analytics.
+
