@@ -11,6 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import type { HistoricalPredictionRecord, HistoricalStatsPayload, Match } from './types';
 import { getKampalaTodayDateStr, getKampalaDateInfo } from './timezoneUtils';
+import { BUNDLED_HISTORICAL_SEEDS } from './data/historicalSeeds';
 
 const isNode = typeof window === 'undefined' && typeof process !== 'undefined' && !!process.versions?.node;
 const DATA_DIR = isNode && typeof path?.join === 'function' && typeof process?.cwd === 'function'
@@ -42,6 +43,15 @@ export class HistoryStore {
 
   private loadFromDisk() {
     if (this.isLoaded) return;
+
+    // 1. Populate authoritative bundled historical records first (available everywhere, 0ms I/O)
+    if (Array.isArray(BUNDLED_HISTORICAL_SEEDS)) {
+      BUNDLED_HISTORICAL_SEEDS.forEach((rec) => {
+        this.records.set(String(rec.id), rec);
+      });
+    }
+
+    // 2. Overlay any updated or newly settled records from local disk / serverless temp directory
     if (isNode && fs && typeof fs.existsSync === 'function' && HISTORY_FILE_PATH) {
       try {
         if (fs.existsSync(HISTORY_FILE_PATH)) {
@@ -58,7 +68,7 @@ export class HistoryStore {
       }
     }
 
-    // If empty, seed initial authoritative historical predictions
+    // 3. Fallback to hardcoded initial seeds if still empty
     if (this.records.size === 0) {
       this.seedAuthoritativeHistory();
       if (isNode) {
