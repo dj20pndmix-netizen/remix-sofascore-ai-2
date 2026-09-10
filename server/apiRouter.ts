@@ -272,6 +272,42 @@ app.post('/api/verification/reconcile', (req, res) => {
   }
 });
 
+app.get('/api/verification/run-tests', (req, res) => {
+  try {
+    const testReport = runAutomatedVerificationTests();
+    res.json(testReport);
+  } catch (error) {
+    console.error('Error running test suite:', error);
+    res.status(500).json({ error: 'Failed to run verification test suite' });
+  }
+});
+
+app.post('/api/verification/manual-verify', (req, res) => {
+  try {
+    const { matchId, htHome, htAway, ftHome, ftAway, adminNotes } = req.body;
+    if (matchId === undefined || htHome === undefined || htAway === undefined || ftHome === undefined || ftAway === undefined) {
+      return res.status(400).json({ success: false, message: 'Missing required score fields' });
+    }
+    const result = globalMatchStore.manualVerifyMatch(
+      Number(matchId),
+      {
+        htHome: Number(htHome),
+        htAway: Number(htAway),
+        ftHome: Number(ftHome),
+        ftAway: Number(ftAway)
+      },
+      adminNotes || 'Admin manual verification'
+    );
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('Error in manual verification:', error);
+    res.status(500).json({ success: false, message: 'Internal server error during verification' });
+  }
+});
+
 // Google Search Grounding & Intel
 app.post('/api/verify-match-intel', async (req, res) => {
   try {
